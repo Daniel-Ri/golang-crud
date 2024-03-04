@@ -1,4 +1,4 @@
-module daniel/crud
+module daniel/golang-crud
 
 go 1.22.0
 

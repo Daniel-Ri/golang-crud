@@ -14,3 +14,18 @@ INSERT INTO students (student_id, name, email, gender, major) VALUES
 ('3', 'Michael Johnson', 'michael.johnson@example.com', 'Male', 'Biology'),
 ('4', 'Emily Williams', 'emily.williams@example.com', 'Female', 'Psychology'),
 ('5', 'David Brown', 'david.brown@example.com', 'Male', 'Business Administration');
+
+DROP TABLE IF EXISTS courses;
+CREATE TABLE courses (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    credits INT
+);
+
+-- Inserting dummy data into the "courses" table
+INSERT INTO courses (name, credits) VALUES
+    ('Introduction to Programming', 3),
+    ('Database Management', 4),
+    ('Web Development', 3),
+    ('Data Structures and Algorithms', 4),
+    ('Computer Networks', 3);
