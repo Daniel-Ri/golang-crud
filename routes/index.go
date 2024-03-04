@@ -32,6 +32,18 @@ func NewRouter(db *sql.DB) *mux.Router {
 	router.HandleFunc("/courses", func(w http.ResponseWriter, r *http.Request) {
 		controllers.GetAllCourses(w, r, db)
 	}).Methods("GET")
+	router.HandleFunc("/courses/{courseId}", func(w http.ResponseWriter, r *http.Request) {
+		controllers.GetCourse(w, r, db)
+	}).Methods("GET")
+	router.HandleFunc("/courses", func(w http.ResponseWriter, r *http.Request) {
+		controllers.CreateCourse(w, r, db)
+	}).Methods("POST")
+	router.HandleFunc("/courses/{courseId}", func(w http.ResponseWriter, r *http.Request) {
+		controllers.UpdateCourse(w, r, db)
+	}).Methods("PUT")
+	router.HandleFunc("/courses/{courseId}", func(w http.ResponseWriter, r *http.Request) {
+		controllers.DeleteCourse(w, r, db)
+	}).Methods("DELETE")
 
 	return router
 }

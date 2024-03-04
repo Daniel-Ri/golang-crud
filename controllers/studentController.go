@@ -41,7 +41,10 @@ func GetStudent(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	var student models.Student
 	err := db.QueryRow("SELECT * FROM students WHERE student_id = $1", params["studentId"]).Scan(&student.StudentID, &student.Name, &student.Email, &student.Gender, &student.Major)
 	if err != nil {
-		log.Fatal(err)
+		errorMessage := ErrorMessage{Message: "Student Not Found"}
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(errorMessage)
+		return
 	}
 	json.NewEncoder(w).Encode(student)
 }
@@ -69,7 +72,7 @@ func CreateStudent(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 	_, err = db.Exec("INSERT INTO students (student_id, name, email, gender, major) VALUES ($1, $2, $3, $4, $5)", student.StudentID, student.Name, student.Email, student.Gender, student.Major)
 	if err != nil {
-		log.Fatal((err))
+		log.Fatal(err)
 	}
 	json.NewEncoder(w).Encode(student)
 }
@@ -160,7 +163,7 @@ func DeleteStudent(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	_, err = db.Exec("DELETE FROM students WHERE student_id=$1", params["id"])
+	_, err = db.Exec("DELETE FROM students WHERE student_id=$1", params["studentId"])
 	if err != nil {
 		log.Fatal(err)
 	}

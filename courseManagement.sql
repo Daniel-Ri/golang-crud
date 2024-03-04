@@ -1,10 +1,10 @@
 DROP TABLE IF EXISTS students;
 CREATE TABLE students (
     student_id VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(100),
-    email VARCHAR(100),
-    gender VARCHAR(10),
-    major VARCHAR(100)
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    gender VARCHAR(10) NOT NULL,
+    major VARCHAR(100) NOT NULL
 );
 
 -- Insert dummy data into the Student table
@@ -18,8 +18,8 @@ INSERT INTO students (student_id, name, email, gender, major) VALUES
 DROP TABLE IF EXISTS courses;
 CREATE TABLE courses (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100),
-    credits INT
+    name VARCHAR(100) UNIQUE NOT NULL,
+    credits INT NOT NULL
 );
 
 -- Inserting dummy data into the "courses" table
