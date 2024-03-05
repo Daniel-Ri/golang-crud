@@ -24,7 +24,7 @@ func GetAllCourses(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	var courses []models.Course
 	for rows.Next() {
 		var course models.Course
-		err := rows.Scan(&course.ID, &course.Name, &course.Credits)
+		err := rows.Scan(&course.ID, &course.Name, &course.MaxCapacity, &course.Credits)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -39,7 +39,7 @@ func GetCourse(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 	params := mux.Vars(r) // Get params
 	var course models.Course
-	err := db.QueryRow("SELECT * FROM courses WHERE id = $1", params["courseId"]).Scan(&course.ID, &course.Name, &course.Credits)
+	err := db.QueryRow("SELECT * FROM courses WHERE id = $1", params["courseId"]).Scan(&course.ID, &course.Name, &course.MaxCapacity, &course.Credits)
 	if err != nil {
 		errorMessage := ErrorMessage{Message: "Course Not Found"}
 		w.WriteHeader(http.StatusNotFound)
@@ -71,13 +71,15 @@ func CreateCourse(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	_, err = db.Exec("INSERT INTO courses (name, credits) VALUES ($1, $2)", course.Name, course.Credits)
+	_, err = db.Exec("INSERT INTO courses (name, max_capacity, credits) VALUES ($1, $2, $3)", course.Name, course.MaxCapacity, course.Credits)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var createdCourse models.Course
-	err = db.QueryRow("SELECT * FROM courses WHERE name = $1", course.Name).Scan(&createdCourse.ID, &createdCourse.Name, &createdCourse.Credits)
+	err = db.
+		QueryRow("SELECT * FROM courses WHERE name = $1", course.Name).
+		Scan(&createdCourse.ID, &createdCourse.Name, &createdCourse.MaxCapacity, &createdCourse.Credits)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,8 +93,6 @@ func UpdateCourse(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	params := mux.Vars(r)
 	var course models.Course
 	_ = json.NewDecoder(r.Body).Decode(&course)
-
-	fmt.Println("courseId", params["courseId"])
 
 	// Check if the course exists
 	var count int
@@ -130,6 +130,11 @@ func UpdateCourse(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		values = append(values, course.Name)
 		paramCount++
 	}
+	if course.MaxCapacity != 0 || r.FormValue("maxCapacity") != "" {
+		updateQuery += fmt.Sprintf("max_capacity = $%d, ", paramCount)
+		values = append(values, course.MaxCapacity)
+		paramCount++
+	}
 	if course.Credits != 0 || r.FormValue("credits") != "" {
 		updateQuery += fmt.Sprintf("credits = $%d, ", paramCount)
 		values = append(values, course.Credits)
@@ -143,8 +148,6 @@ func UpdateCourse(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	updateQuery += fmt.Sprintf(" WHERE id = $%d", paramCount)
 	values = append(values, params["courseId"])
 
-	fmt.Println("updateQuery", updateQuery)
-
 	// Execute the UPDATE statement
 	_, err = db.Exec(updateQuery, values...)
 	if err != nil {
@@ -152,7 +155,9 @@ func UpdateCourse(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	var updatedCourse models.Course
-	err = db.QueryRow("SELECT * FROM courses WHERE id = $1", params["courseId"]).Scan(&updatedCourse.ID, &updatedCourse.Name, &updatedCourse.Credits)
+	err = db.
+		QueryRow("SELECT * FROM courses WHERE id = $1", params["courseId"]).
+		Scan(&updatedCourse.ID, &updatedCourse.Name, &updatedCourse.MaxCapacity, &updatedCourse.Credits)
 	if err != nil {
 		log.Fatal(err)
 	}

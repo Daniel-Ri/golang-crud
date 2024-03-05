@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/lib/pq"
 )
 
 // Get all students
@@ -168,4 +170,101 @@ func DeleteStudent(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		log.Fatal(err)
 	}
 	json.NewEncoder(w).Encode(map[string]string{"message": "Student deleted successfully"})
+}
+
+// Enroll course
+func EnrollCourses(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	w.Header().Set("Content-Type", "application/json")
+
+	defer func() {
+		if r := recover(); r != nil {
+			if thrownErr, ok := r.(ThrownError); ok {
+				w.WriteHeader(thrownErr.Code)
+				json.NewEncoder(w).Encode(ErrorMessage{Message: thrownErr.Message})
+			} else {
+				message := fmt.Sprintf("%v", r)
+				json.NewEncoder(w).Encode(ErrorMessage{Message: message})
+			}
+		}
+	}()
+
+	tx, err := db.Begin()
+	if err != nil {
+		panic(ThrownError{Code: http.StatusInternalServerError, Message: err.Error()})
+	}
+	defer tx.Rollback() // Rollback transaction if not committed
+
+	params := mux.Vars(r)
+	var inputs struct {
+		CourseIDs []int `json:"courseIds"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&inputs)
+
+	var count int
+	err = tx.QueryRow("SELECT COUNT(*) FROM students WHERE student_id = $1", params["studentId"]).Scan(&count)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if count == 0 {
+		panic(ThrownError{Code: http.StatusNotFound, Message: "Student Not Found"})
+	}
+
+	err = tx.QueryRow("SELECT COUNT(*) FROM courses WHERE id = ANY($1)", pq.Array(inputs.CourseIDs)).Scan(&count)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if count != len(inputs.CourseIDs) {
+		panic(ThrownError{Code: http.StatusNotFound, Message: "Some course IDs Are Not Found"})
+	}
+
+	err = tx.QueryRow("SELECT COUNT(*) FROM enrollments WHERE student_id = $1 AND course_id = ANY($2)", params["studentId"], pq.Array(inputs.CourseIDs)).Scan(&count)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if count > 0 {
+		panic(ThrownError{Code: http.StatusConflict, Message: "You can't enrolled some courses again"})
+	}
+
+	err = tx.QueryRow(`
+			SELECT COUNT(*)
+			FROM (
+				SELECT course_id, COUNT(*) AS count_enroll
+				FROM enrollments
+				WHERE course_id = ANY($1)
+				GROUP BY course_id
+			) AS subquery 
+			JOIN courses ON subquery.course_id = courses.id
+			WHERE count_enroll >= max_capacity;
+		`, pq.Array(inputs.CourseIDs)).
+		Scan(&count)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if count > 0 {
+		panic(
+			ThrownError{Code: http.StatusConflict, Message: "Some courses have reached max capacity"},
+		)
+	}
+
+	// Insert enrollments to database
+	currentDate := time.Now().Format("2006-01-02")
+	stmt, err := tx.Prepare("INSERT INTO enrollments (student_id, course_id, enrollment_date) VALUES ($1, $2, $3)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer stmt.Close()
+
+	for _, courseID := range inputs.CourseIDs {
+		_, err := stmt.Exec(params["studentId"], courseID, currentDate)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		panic(ThrownError{Code: http.StatusInternalServerError, Message: err.Error()})
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"message": "Success enroll courses"})
 }
