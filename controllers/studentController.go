@@ -172,21 +172,11 @@ func DeleteStudent(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Student deleted successfully"})
 }
 
-// Enroll course
+// Enroll courses
 func EnrollCourses(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	w.Header().Set("Content-Type", "application/json")
 
-	defer func() {
-		if r := recover(); r != nil {
-			if thrownErr, ok := r.(ThrownError); ok {
-				w.WriteHeader(thrownErr.Code)
-				json.NewEncoder(w).Encode(ErrorMessage{Message: thrownErr.Message})
-			} else {
-				message := fmt.Sprintf("%v", r)
-				json.NewEncoder(w).Encode(ErrorMessage{Message: message})
-			}
-		}
-	}()
+	defer CatchPanic(w)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -217,7 +207,11 @@ func EnrollCourses(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		panic(ThrownError{Code: http.StatusNotFound, Message: "Some course IDs Are Not Found"})
 	}
 
-	err = tx.QueryRow("SELECT COUNT(*) FROM enrollments WHERE student_id = $1 AND course_id = ANY($2)", params["studentId"], pq.Array(inputs.CourseIDs)).Scan(&count)
+	err = tx.
+		QueryRow(
+			"SELECT COUNT(*) FROM enrollments WHERE student_id = $1 AND course_id = ANY($2)",
+			params["studentId"], pq.Array(inputs.CourseIDs),
+		).Scan(&count)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -267,4 +261,51 @@ func EnrollCourses(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]string{"message": "Success enroll courses"})
+}
+
+// Get list of student's courses
+func GetStudentCourses(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	w.Header().Set("Content-Type", "application/json")
+	defer CatchPanic(w)
+
+	params := mux.Vars(r)
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM students WHERE student_id = $1", params["studentId"]).Scan(&count)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if count == 0 {
+		panic(ThrownError{Code: http.StatusNotFound, Message: "Student Not Found"})
+	}
+
+	rows, err := db.Query(`
+			SELECT course_id, name, credits, grade
+			FROM (
+				SELECT *
+				FROM enrollments
+				WHERE student_id = $1
+			) AS subquery JOIN courses ON subquery.course_id = courses.id
+		`, params["studentId"])
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	type tempStruct struct {
+		CourseID int     `json:"courseId"`
+		Name     string  `json:"name"`
+		Credits  int     `json:"credits"`
+		Grade    float64 `json:"grade"`
+	}
+
+	var outputs []tempStruct
+	for rows.Next() {
+		var output tempStruct
+		err := rows.Scan(&output.CourseID, &output.Name, &output.Credits, &output.Grade)
+		if err != nil {
+			log.Fatal(err)
+		}
+		outputs = append(outputs, output)
+	}
+	json.NewEncoder(w).Encode(outputs)
 }
